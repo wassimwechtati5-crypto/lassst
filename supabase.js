@@ -1,22 +1,35 @@
-// Shared status logic for index.html + admin.html
-// 1) localStorage = works instantly on same browser/phone (no setup needed)
-// 2) Supabase = syncs across different devices (fill URL + KEY below to enable)
+// ============================================================
+// PUBLIC STATUS SYNC - CONFIG
+// Fill these 2 values to make Open/Close visible to EVERYONE.
+// Supabase Dashboard > Project Settings > API:
+//   - Project URL = https://xyzcompany.supabase.co
+//   - anon public key = eyJhbGciOi... (long JWT)  OR  sb_publishable_...
+// NEVER use sb_secret_ or service_role key in this frontend file.
+// ============================================================
+const SUPABASE_URL = "YOUR_PROJECT_URL"; // e.g. "https://xyzcompany.supabase.co"
+const SUPABASE_KEY = "YOUR_ANON_PUBLIC_KEY"; // e.g. "eyJhbGciOi..."
 
-const SUPABASE_URL = ""; // e.g. "https://xyzcompany.supabase.co"
-const SUPABASE_KEY = "sb_publishable_YAxqdWra-SoUDlXluoXivg_EZ0fRtip"; // publishable (anon) key - never put sb_secret_ here
-
-const STATUS_KEY = "barber_status"; // localStorage key: "OPEN" | "CLOSED"
+const STATUS_KEY = "barber_status"; // localStorage cache key: "OPEN" | "CLOSED"
+const TABLE = "settings";
+const ROW_ID = 1;
 
 let supabaseClient = null;
 
-// Only create Supabase client when URL looks valid.
-// This way the site still works (via localStorage) before Supabase is configured.
+function isSupabaseConfigured() {
+  return (
+    typeof SUPABASE_URL === "string" &&
+    SUPABASE_URL.startsWith("https://") &&
+    SUPABASE_URL.includes(".supabase.co") &&
+    typeof SUPABASE_KEY === "string" &&
+    SUPABASE_KEY.length > 20 &&
+    !SUPABASE_KEY.includes("YOUR_")
+  );
+}
+
+// Only create Supabase client when config looks valid.
+// localStorage is used as instant cache, Supabase is the public source of truth.
 try {
-  if (
-    typeof supabase !== "undefined" &&
-    SUPABASE_URL &&
-    SUPABASE_URL.startsWith("https://")
-  ) {
+  if (typeof supabase !== "undefined" && isSupabaseConfigured()) {
     supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   } else {
     console.warn("Supabase not configured - using localStorage only.");
@@ -44,17 +57,17 @@ function setLocalStatus(status) {
   } catch (e) {}
 }
 
-// Read from Supabase (returns "OPEN"/"CLOSED" or null)
+// Read from Supabase (public - everyone can read). Returns "OPEN"/"CLOSED" or null.
 async function fetchRemoteStatus() {
   if (!supabaseClient) return null;
   try {
     const { data, error } = await supabaseClient
-      .from("settings")
+      .from(TABLE)
       .select("status")
-      .eq("id", 1)
-      .single();
+      .eq("id", ROW_ID)
+      .maybeSingle();
     if (error) {
-      console.warn("Load status error:", error);
+      console.warn("Load status error:", error.message);
       return null;
     }
     if (data && (data.status === "OPEN" || data.status === "CLOSED")) {
@@ -67,26 +80,29 @@ async function fetchRemoteStatus() {
   }
 }
 
-// Write to Supabase (returns true on success, false if not configured/failed)
+// Write to Supabase (admin page). Everyone reading index.html sees it.
+// Throws with readable message if RLS / network blocks it.
 async function pushRemoteStatus(status) {
-  if (!supabaseClient) return false;
+  if (!supabaseClient) {
+    throw new Error("Supabase not configured (URL / anon key missing).");
+  }
   try {
     const { error } = await supabaseClient
-      .from("settings")
+      .from(TABLE)
       .update({ status: status })
-      .eq("id", 1);
+      .eq("id", ROW_ID);
     if (error) {
       console.error("Update status error:", error);
-      return false;
+      throw new Error(error.message);
     }
     return true;
   } catch (e) {
     console.error("Update status error:", e);
-    return false;
+    throw e;
   }
 }
 
-// Get current status: Supabase first (if configured), otherwise localStorage.
+// Get current status: Supabase first (public source of truth), then local cache.
 // Default = "OPEN" when nothing saved yet.
 async function getCurrentStatus() {
   const remote = await fetchRemoteStatus();
@@ -97,9 +113,12 @@ async function getCurrentStatus() {
   return getLocalStatus() || "OPEN";
 }
 
-// Save status everywhere: localStorage always, Supabase when configured.
+// Save status everywhere: Supabase first (so everyone sees it), then local cache.
 async function saveStatus(status) {
+  if (!isSupabaseConfigured() || !supabaseClient) {
+    throw new Error("Supabase not configured. Paste URL + anon key in supabase.js.");
+  }
+  await pushRemoteStatus(status);
   setLocalStatus(status);
-  const ok = await pushRemoteStatus(status);
-  return ok;
+  return true;
 }

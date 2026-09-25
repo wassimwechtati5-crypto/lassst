@@ -47,14 +47,19 @@ function applyStatus(status) {
   }
 }
 
-// 1) Show saved value instantly (no blank / no flicker)
-applyStatus(getLocalStatus ? getLocalStatus() || "OPEN" : "OPEN");
+// 1) Show cached value instantly, then fetch PUBLIC value from Supabase
+// so every visitor sees the same status set from admin.
+if (typeof getLocalStatus === "function") {
+  applyStatus(getLocalStatus() || "OPEN");
+}
 
-// 2) Then sync with the true value (Supabase if configured, else localStorage)
+// 2) Then sync with the public source of truth (Supabase)
 async function refreshStatus() {
   try {
-    const status = await getCurrentStatus();
-    applyStatus(status);
+    if (typeof getCurrentStatus === "function") {
+      const status = await getCurrentStatus();
+      applyStatus(status);
+    }
   } catch (e) {
     console.warn("refreshStatus failed:", e);
   }

@@ -86,44 +86,71 @@
     </button>
 
     <div id="message"></div>
+    <div id="config-warning" style="margin-top:15px;font-size:13px;color:#fbbf24;display:none;">
+        ⚠️ Supabase not configured — status will only change on this browser, not for everyone.
+        Paste URL + anon key in supabase.js.
+    </div>
 
 </div>
 
 <script>
 
-// Show current status on load (Supabase if configured, else localStorage)
+// Show current PUBLIC status on load
 async function loadStatus() {
+    if (!isSupabaseConfigured || !isSupabaseConfigured()) {
+        document.getElementById("config-warning").style.display = "block";
+    }
     try {
         const status = await getCurrentStatus();
         document.getElementById("current-status").textContent = status;
     } catch (e) {
         console.error(e);
         document.getElementById("current-status").textContent = "ERROR";
+        document.getElementById("message").textContent = "❌ " + (e.message || e);
     }
 }
 
 
-// Click OPEN -> index page shows OPEN. Click CLOSED -> index shows CLOSED.
+// Click OPEN -> EVERYONE on index.html sees OPEN. Click CLOSED -> everyone sees CLOSED.
 async function changeStatus(newStatus) {
-    document.getElementById("message").textContent = "Updating...";
+    const msg = document.getElementById("message");
+    const buttons = document.querySelectorAll("button");
+    msg.textContent = "Updating for everyone...";
+    buttons.forEach(b => b.disabled = true);
 
     try {
         await saveStatus(newStatus);
 
         document.getElementById("current-status").textContent = newStatus;
-
-        document.getElementById("message").textContent =
-            "✅ Status updated successfully!";
+        msg.textContent = "✅ " + newStatus + " is now live for everyone!";
     } catch (e) {
         console.error(e);
-
-        document.getElementById("message").textContent =
-            "❌ Error: " + (e.message || e);
+        msg.textContent = "❌ Error: " + (e.message || e);
+    } finally {
+        buttons.forEach(b => b.disabled = false);
     }
 }
 
 
 loadStatus();
+
+// Keep admin in sync if status changes elsewhere
+try {
+  if (typeof supabaseClient !== "undefined" && supabaseClient) {
+    supabaseClient
+      .channel("admin-settings-status")
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "settings", filter: "id=eq.1" },
+        (payload) => {
+          const s = payload?.new?.status;
+          if (s === "OPEN" || s === "CLOSED") {
+            document.getElementById("current-status").textContent = s;
+            setLocalStatus(s);
+          }
+        })
+      .subscribe();
+  }
+} catch (e) { console.warn(e); }
 
 </script>
 
