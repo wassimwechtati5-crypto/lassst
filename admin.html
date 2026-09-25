@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Barber Admin</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: white;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .box {
+            max-width: 400px;
+            margin: auto;
+            background: #1c1c1c;
+            padding: 30px;
+            border-radius: 20px;
+        }
+
+        h1 {
+            margin-bottom: 30px;
+        }
+
+        #current-status {
+            font-size: 28px;
+            margin: 25px 0;
+            font-weight: bold;
+        }
+
+        button {
+            width: 100%;
+            padding: 18px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 12px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .open {
+            background: #22c55e;
+            color: white;
+        }
+
+        .closed {
+            background: #ef4444;
+            color: white;
+        }
+
+        #message {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="box">
+
+    <h1>Barber Admin</h1>
+
+    <div>
+        Current status:
+    </div>
+
+    <div id="current-status">
+        Loading...
+    </div>
+
+    <button class="open" onclick="changeStatus('OPEN')">
+        🟢 OPEN
+    </button>
+
+    <button class="closed" onclick="changeStatus('CLOSED')">
+        🔴 CLOSED
+    </button>
+
+    <div id="message"></div>
+
+</div>
+
+<script>
+
+// Show current status on load (Supabase if configured, else localStorage)
+async function loadStatus() {
+    try {
+        const status = await getCurrentStatus();
+        document.getElementById("current-status").textContent = status;
+    } catch (e) {
+        console.error(e);
+        document.getElementById("current-status").textContent = "ERROR";
+    }
+}
+
+
+// Click OPEN -> index page shows OPEN. Click CLOSED -> index shows CLOSED.
+async function changeStatus(newStatus) {
+    document.getElementById("message").textContent = "Updating...";
+
+    try {
+        await saveStatus(newStatus);
+
+        document.getElementById("current-status").textContent = newStatus;
+
+        document.getElementById("message").textContent =
+            "✅ Status updated successfully!";
+    } catch (e) {
+        console.error(e);
+
+        document.getElementById("message").textContent =
+            "❌ Error: " + (e.message || e);
+    }
+}
+
+
+loadStatus();
+
+</script>
+
+</body>
+</html>
